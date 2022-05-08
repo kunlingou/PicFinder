@@ -1,10 +1,19 @@
 __author__ = '雪气近'
 # coding: UTF-8
+import json
 
 import requests
 import re
 import time
 import os
+import pygame
+from TextBox import *
+
+SPEC_WIDTH = 9
+SPEC_HEIGHT = 9
+
+SCREEN_WIDTH = 500
+SCREEN_HEIGHT = 500
 
 
 class KeySearcher:
@@ -55,9 +64,10 @@ class KeySearcher:
             fp.close()
         print("本次共下载" + str(i + 1) + "张图片，存储路径：" + down_path)
 
-    def get_search_book(self):
+    @staticmethod
+    def get_search_book(word):
 
-        url = f"https://www.biqugesk.org/modules/article/search.php?searchkey={self.word}"
+        url = f"https://www.biqugesk.org/modules/article/search.php?searchkey={word}"
         data = requests.get(url=url, allow_redirects=False).content.decode('utf-8')
 
         book_list = re.findall('<tr>(.*?)</tr>', data, re.S)
@@ -76,7 +86,8 @@ class KeySearcher:
 
         return books
 
-    def get_book_category(self, book):
+    @staticmethod
+    def get_book_category(book):
 
         data = requests.get(url=book["href"], allow_redirects=False).content.decode('utf-8')
 
@@ -95,7 +106,7 @@ class KeySearcher:
         print("download book start")
         down_path = self.init_path(self.output_path + "book")
 
-        books = self.get_search_book()
+        books = self.get_search_book(self.word)
 
         print("books:", books)
 
@@ -124,9 +135,142 @@ class KeySearcher:
             print(f'下载完成：{full_name}')
 
 
+class SearchButton:
+    def __init__(self, rect):
+        self.width = 50
+        self.height = 20
+        self.rect = rect
+        self.name = "查询"
+
+    def event(self, env, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            print(f"SearchButton click success,  text: {env.inputBox.text}")
+            env.search()
+
+    def draw(self, screen):
+        screen.fill((78, 110, 242), self.rect)
+
+        msg_image = pygame.font.SysFont("SimHei", self.height * 3 // 5).render(self.name, True, (255, 255, 255),
+                                                                                 (78, 110, 242))
+        msg_image_rect = msg_image.get_rect()
+        msg_image_rect.center = self.rect.center
+        screen.blit(msg_image, msg_image_rect)
+
+
+class Book:
+    def __init__(self, config):
+        self.config = config
+        self.title = config["title"]
+        self.author = config["author"]
+        self.href = config["href"]
+        self.rect = pygame.Rect(50, 52, 380, 70)
+        self.category = []
+
+    def draw(self, screen):
+        screen.fill((255, 255, 255), self.rect)
+        msg = pygame.font.SysFont("SimHei", 14).render(f'{self.title} -- {self.author}', True, (0, 0, 0),
+                                                       (255, 255, 255))
+        rect2 = msg.get_rect()
+        rect2.x = self.rect.x
+        rect2.y = self.rect.y
+        screen.blit(msg, rect2)
+
+        offset = 20
+
+        for title in self.category:
+            msg = pygame.font.SysFont("SimHei", 14).render(f'{title["title"]}', True, (0, 0, 0),
+                                                           (255, 255, 255))
+            rect2 = msg.get_rect()
+            rect2.x = self.rect.x
+            rect2.y = self.rect.y + offset
+            screen.blit(msg, rect2)
+            offset += 20
+
+    def event(self, env, event):
+        if event.type != pygame.MOUSEBUTTONDOWN:
+            return
+        print("book")
+        env.book = [self]
+        self.category = KeySearcher.get_book_category(self.config)
+        self.rect.height = 400
+
+
+class Environment:
+    def __init__(self, config):
+        self.width = config["width"]
+        self.height = config["height"]
+
+        pygame.init()
+        self.clock = pygame.time.Clock()
+        self.screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
+
+        self.inputBox = TextBox(300, 32, 50, 20)
+        self.searchBotton = SearchButton(pygame.Rect(350, 20, 80, 32))
+        self.comp = [
+            {
+                "rect": self.inputBox.rect,
+                "component": self.inputBox
+            },
+            {
+                "rect": self.searchBotton.rect,
+                "component": self.searchBotton
+            }
+        ]
+
+        self.book = []
+
+    def reload(self):
+        self.screen.fill((247, 238, 214))
+        for comp in self.comp:
+            comp["component"].draw(self.screen)
+        height = 10
+        for book in self.book:
+            book.rect.y = 52 + height
+            book.draw(self.screen)
+            height += 80
+
+        pygame.display.update()
+        pygame.display.flip()
+
+    def event(self, event):
+        self.reload()
+
+    def search(self):
+        print("do something for search")
+        text = self.inputBox.text
+
+        books = KeySearcher.get_search_book(text)
+        self.book = []
+        for book in books:
+            self.book.append(Book(book))
+
+        print(books)
+
+
+def main():
+    env = Environment({"width": SPEC_WIDTH, "height": SPEC_HEIGHT})
+    env.reload()
+
+    while 1:
+        env.clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            else:
+                for comp in env.comp:
+                    if comp["rect"].collidepoint(pygame.mouse.get_pos()):
+                        comp["component"].event(env, event)
+                for book in env.book:
+                    if book.rect.collidepoint(pygame.mouse.get_pos()):
+                        book.event(env, event)
+            env.event(event)
+
+
 if __name__ == "__main__":
-    searcher = KeySearcher()
-    searcher.down_ebook()
+    # searcher = KeySearcher()
+    # searcher.down_ebook()
+    main()
 
 
 
